@@ -24,11 +24,22 @@ public class AssistantView extends View {
  public void setMode(int m){handler.removeCallbacks(resetEmotion);mode=Math.max(0,Math.min(m,2));emotion=0;load();}
  public void setEmotion(int e){emotion=Math.max(0,Math.min(e,emotions.length-1));handler.removeCallbacks(resetEmotion);if(emotion!=0&&emotion!=2)handler.postDelayed(resetEmotion,4500);load();}
  private Bitmap read(String path){if(missing.contains(path))return null;Bitmap cached=cache.get(path);if(cached!=null)return cached;try(InputStream in=getContext().getAssets().open(path)){Bitmap b=BitmapFactory.decodeStream(in);if(b!=null)cache.put(path,b);else missing.add(path);return b;}catch(java.io.IOException e){missing.add(path);return null;}}
- private Movie readMovie(String name){if(movies.containsKey(name))return movies.get(name);try(InputStream in=getContext().getAssets().open("characters/"+(name.equals("hunter")?"8484397f010ce4e937551569f6712341edd14375f2ed0a219465ca5a08e480b1":name.equals("shadow")?"326fca824b5a7f137a156a89982bd6f1432db4bd105dff438ed8592f1b9d4d02":"2e6e0d2b8745bc1065ce5a01815b9e8b08199c9a7d1982a54d2d1a9017ff1968")+".gif")){Movie m=Movie.decodeStream(in);if(m!=null)movies.put(name,m);return m;}catch(java.io.IOException e){return null;}}
- private void load(){movie=readMovie(modes[mode]);changed=SystemClock.uptimeMillis();bitmap=read("characters/"+modes[mode]+"/"+emotions[emotion]+".png");if(bitmap==null&&movie==null)bitmap=read("characters/"+modes[mode]+"/calm.png");setContentDescription(modes[mode]+" "+emotions[emotion]);invalidate();}
- @Override protected void onDetachedFromWindow(){handler.removeCallbacks(resetEmotion);super.onDetachedFromWindow();}
+ private String assetPath(String name){return "characters/"+(name.equals("hunter")?"8484397f010ce4e937551569f6712341edd14375f2ed0a219465ca5a08e480b1":name.equals("shadow")?"326fca824b5a7f137a156a89982bd6f1432db4bd105dff438ed8592f1b9d4d02":"2e6e0d2b8745bc1065ce5a01815b9e8b08199c9a7d1982a54d2d1a9017ff1968")+".gif";}
+ private android.graphics.drawable.Drawable animated;
+ private Movie readMovie(String name){
+ animated=null;
+ if(android.os.Build.VERSION.SDK_INT>=28){try{
+ animated=android.graphics.ImageDecoder.decodeDrawable(android.graphics.ImageDecoder.createSource(getContext().getAssets(),assetPath(name)));
+ if(animated instanceof android.graphics.drawable.AnimatedImageDrawable){android.graphics.drawable.AnimatedImageDrawable a=(android.graphics.drawable.AnimatedImageDrawable)animated;a.setRepeatCount(-1);a.setCallback(this);a.start();}
+ return null;
+ }catch(Exception e){android.util.Log.e("SUMAX","ImageDecoder failed",e);}}
+ try(InputStream in=getContext().getAssets().open(assetPath(name))){return Movie.decodeStream(in);}catch(Exception e){android.util.Log.e("SUMAX","GIF failed",e);return null;}
+ }
+ @Override protected boolean verifyDrawable(android.graphics.drawable.Drawable d){return d==animated||super.verifyDrawable(d);}
+ private void load(){if(animated instanceof android.graphics.drawable.AnimatedImageDrawable)((android.graphics.drawable.AnimatedImageDrawable)animated).stop();movie=readMovie(modes[mode]);changed=SystemClock.uptimeMillis();bitmap=read("characters/"+modes[mode]+"/"+emotions[emotion]+".png");if(bitmap==null&&movie==null&&animated==null)bitmap=read("characters/"+modes[mode]+"/calm.png");setContentDescription(modes[mode]+" "+emotions[emotion]);invalidate();}
+ @Override protected void onDetachedFromWindow(){handler.removeCallbacks(resetEmotion);if(animated instanceof android.graphics.drawable.AnimatedImageDrawable)((android.graphics.drawable.AnimatedImageDrawable)animated).stop();super.onDetachedFromWindow();}
  @Override public void onWindowFocusChanged(boolean focused){super.onWindowFocusChanged(focused);if(focused)invalidate();}
- @Override protected void onDraw(Canvas c){super.onDraw(c);if((bitmap==null||emotion==0)&&movie!=null&&movie.width()>0&&movie.height()>0){float scale=Math.min(getWidth()/(float)movie.width(),getHeight()*.60f/movie.height());float w=movie.width()*scale,h=movie.height()*scale;float x=(getWidth()-w)/2f,y=getHeight()*.04f;movie.setTime((int)((SystemClock.uptimeMillis()-changed)%Math.max(1,movie.duration())));double t=SystemClock.uptimeMillis()/1000.0;
+ @Override protected void onDraw(Canvas c){super.onDraw(c);if(animated!=null&&(bitmap==null||emotion==0)){int iw=Math.max(1,animated.getIntrinsicWidth()),ih=Math.max(1,animated.getIntrinsicHeight());float s=Math.min(getWidth()/(float)iw,getHeight()*.60f/ih);int w=(int)(iw*s),h=(int)(ih*s),x=(getWidth()-w)/2,y=(int)(getHeight()*.04f);animated.setBounds(x,y,x+w,y+h);animated.draw(c);if(isShown()&&hasWindowFocus())postInvalidateDelayed(33);return;}if((bitmap==null||emotion==0)&&movie!=null&&movie.width()>0&&movie.height()>0){float scale=Math.min(getWidth()/(float)movie.width(),getHeight()*.60f/movie.height());float w=movie.width()*scale,h=movie.height()*scale;float x=(getWidth()-w)/2f,y=getHeight()*.04f;movie.setTime((int)((SystemClock.uptimeMillis()-changed)%Math.max(1,movie.duration())));double t=SystemClock.uptimeMillis()/1000.0;
  float breath=(float)Math.sin(t*2)*getHeight()*.008f;
  float pulse=1f+(speaking?(float)Math.sin(t*15)*.025f:0f)+(emotion==6?.035f:0f);
  float sway=emotion==5?(float)Math.sin(t*22)*3f:0f;
